@@ -60,12 +60,6 @@ class TestGetBedrockTokenLimit:
             )
             assert result == 200000
 
-    def test_hardcoded_mapping_claude_3(self) -> None:
-        """Test hardcoded mapping for Claude 3 models."""
-        with patch("onyx.llm.utils.get_model_map", return_value={}):
-            result = get_bedrock_token_limit("anthropic.claude-3-opus-20240229-v1:0")
-            assert result == 200000
-
     def test_hardcoded_mapping_llama3_3(self) -> None:
         """Test hardcoded mapping for Llama 3.3 models (128K context)."""
         with patch("onyx.llm.utils.get_model_map", return_value={}):
@@ -94,8 +88,8 @@ class TestGetBedrockTokenLimit:
         """Test default fallback for unknown models."""
         with patch("onyx.llm.utils.get_model_map", return_value={}):
             result = get_bedrock_token_limit("unknown.model-v1:0")
-            # Should fall back to GEN_AI_MODEL_FALLBACK_MAX_TOKENS (4096)
-            assert result == 4096
+            # Should fall back to GEN_AI_MODEL_FALLBACK_MAX_TOKENS (32000)
+            assert result == 32000
 
     def test_cross_region_model_id(self) -> None:
         """Test cross-region model ID (us.anthropic.claude-...)."""

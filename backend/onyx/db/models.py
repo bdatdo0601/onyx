@@ -2141,6 +2141,8 @@ class ChatMessage(Base):
     time_sent: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    # True if this assistant message is a clarification question (deep research flow)
+    is_clarification: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Relationships
     chat_session: Mapped[ChatSession] = relationship("ChatSession")
@@ -2213,6 +2215,8 @@ class ToolCall(Base):
     # The tools with the same turn number (and parent) were called in parallel
     # Ones with different turn numbers (and same parent) were called sequentially
     turn_number: Mapped[int] = mapped_column(Integer)
+    # Index order of tool calls from the LLM for parallel tool calls
+    tab_index: Mapped[int] = mapped_column(Integer, default=0)
 
     # Not a FK because we want to be able to delete the tool without deleting
     # this entry
@@ -2380,7 +2384,6 @@ class LLMProvider(Base):
         postgresql.JSONB(), nullable=True
     )
     default_model_name: Mapped[str] = mapped_column(String)
-    fast_default_model_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
     deployment_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
@@ -2390,6 +2393,8 @@ class LLMProvider(Base):
     default_vision_model: Mapped[str | None] = mapped_column(String, nullable=True)
     # EE only
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Auto mode: models, visibility, and defaults are managed by GitHub config
+    is_auto_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     groups: Mapped[list["UserGroup"]] = relationship(
         "UserGroup",
         secondary="llm_provider__user_group",
@@ -2445,6 +2450,29 @@ class ModelConfiguration(Base):
     llm_provider: Mapped["LLMProvider"] = relationship(
         "LLMProvider",
         back_populates="model_configurations",
+    )
+
+
+class ImageGenerationConfig(Base):
+    __tablename__ = "image_generation_config"
+
+    image_provider_id: Mapped[str] = mapped_column(String, primary_key=True)
+    model_configuration_id: Mapped[int] = mapped_column(
+        ForeignKey("model_configuration.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    model_configuration: Mapped["ModelConfiguration"] = relationship(
+        "ModelConfiguration"
+    )
+
+    __table_args__ = (
+        Index("ix_image_generation_config_is_default", "is_default"),
+        Index(
+            "ix_image_generation_config_model_configuration_id",
+            "model_configuration_id",
+        ),
     )
 
 
@@ -2956,7 +2984,7 @@ class SlackChannelConfig(Base):
             "slack_bot_id",
             "is_default",
             unique=True,
-            postgresql_where=(is_default is True),  #   type: ignore
+            postgresql_where=(is_default is True),
         ),
     )
 
@@ -3671,6 +3699,9 @@ class MCPServer(Base):
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    last_refreshed_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Relationships
     admin_connection_config: Mapped["MCPConnectionConfig | None"] = relationship(
@@ -3683,6 +3714,7 @@ class MCPServer(Base):
         "MCPConnectionConfig",
         foreign_keys="MCPConnectionConfig.mcp_server_id",
         back_populates="mcp_server",
+        passive_deletes=True,
     )
     current_actions: Mapped[list["Tool"]] = relationship(
         "Tool", back_populates="mcp_server", cascade="all, delete-orphan"
@@ -3911,3 +3943,64 @@ class ExternalGroupPermissionSyncAttempt(Base):
 
     def is_finished(self) -> bool:
         return self.status.is_terminal()
+
+
+class License(Base):
+    """Stores the signed license blob (singleton pattern - only one row)."""
+
+    __tablename__ = "license"
+    __table_args__ = (
+        # Singleton pattern - unique index on constant ensures only one row
+        Index("idx_license_singleton", text("(true)"), unique=True),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    license_data: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class TenantUsage(Base):
+    """
+    Tracks per-tenant usage statistics within a time window for cloud usage limits.
+
+    Each row represents usage for a specific tenant during a specific time window.
+    A new row is created when the window rolls over (typically weekly).
+    """
+
+    __tablename__ = "tenant_usage"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # The start of the usage tracking window (e.g., start of the week in UTC)
+    window_start: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+
+    # Cumulative LLM usage cost in cents for the window
+    llm_cost_cents: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    # Number of chunks indexed during the window
+    chunks_indexed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    # Number of API calls using API keys or Personal Access Tokens
+    api_calls: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    # Number of non-streaming API calls (more expensive operations)
+    non_streaming_api_calls: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+
+    # Last updated timestamp for tracking freshness
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        # Ensure only one row per window start (tenant_id is in the schema name)
+        UniqueConstraint("window_start", name="uq_tenant_usage_window"),
+    )

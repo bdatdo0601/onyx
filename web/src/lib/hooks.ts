@@ -539,6 +539,32 @@ This approach ensures that user preferences are maintained for existing chats wh
 providing appropriate defaults for new conversations based on the available tools.
 */
 
+function getDefaultLlmDescriptor(
+  llmProviders: LLMProviderDescriptor[]
+): LlmDescriptor | null {
+  const defaultProvider = llmProviders.find(
+    (provider) => provider.is_default_provider
+  );
+  if (defaultProvider) {
+    return {
+      name: defaultProvider.name,
+      provider: defaultProvider.provider,
+      modelName: defaultProvider.default_model_name,
+    };
+  }
+  const firstLlmProvider = llmProviders.find(
+    (provider) => provider.model_configurations.length > 0
+  );
+  if (firstLlmProvider) {
+    return {
+      name: firstLlmProvider.name,
+      provider: firstLlmProvider.provider,
+      modelName: firstLlmProvider.default_model_name,
+    };
+  }
+  return null;
+}
+
 export function useLlmManager(
   currentChatSession?: ChatSession,
   liveAssistant?: MinimalPersonaSnapshot
@@ -569,6 +595,22 @@ export function useLlmManager(
     provider: "",
     modelName: "",
   });
+
+  // Track the previous assistant ID to detect when it changes
+  const prevAssistantIdRef = useRef<number | undefined>(undefined);
+
+  // Reset manual override when switching to a different assistant
+  useEffect(() => {
+    if (
+      liveAssistant?.id !== undefined &&
+      prevAssistantIdRef.current !== undefined &&
+      liveAssistant.id !== prevAssistantIdRef.current
+    ) {
+      // User switched to a different assistant - reset manual override
+      setUserHasManuallyOverriddenLLM(false);
+    }
+    prevAssistantIdRef.current = liveAssistant?.id;
+  }, [liveAssistant?.id]);
 
   const llmUpdate = () => {
     /* Should be called when the live assistant or current chat session changes */
@@ -602,16 +644,9 @@ export function useLlmManager(
       } else if (user?.preferences?.default_model) {
         setCurrentLlm(getValidLlmDescriptor(user.preferences.default_model));
       } else {
-        const defaultProvider = llmProviders.find(
-          (provider) => provider.is_default_provider
-        );
-
-        if (defaultProvider) {
-          setCurrentLlm({
-            name: defaultProvider.name,
-            provider: defaultProvider.provider,
-            modelName: defaultProvider.default_model_name,
-          });
+        const defaultLlm = getDefaultLlmDescriptor(llmProviders);
+        if (defaultLlm) {
+          setCurrentLlm(defaultLlm);
         }
       }
     };
@@ -656,7 +691,15 @@ export function useLlmManager(
         return { ...model, provider: provider.provider, name: provider.name };
       }
     }
-    return { name: "", provider: "", modelName: "" };
+
+    // Model not found in available providers - fall back to default model
+    return (
+      getDefaultLlmDescriptor(llmProviders) ?? {
+        name: "",
+        provider: "",
+        modelName: "",
+      }
+    );
   }
 
   const [imageFilesPresent, setImageFilesPresent] = useState(false);

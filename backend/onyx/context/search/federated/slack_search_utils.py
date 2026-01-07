@@ -6,7 +6,6 @@ from datetime import timedelta
 from datetime import timezone
 from typing import Any
 
-from langchain_core.messages import HumanMessage
 from pydantic import ValidationError
 
 from onyx.configs.app_configs import MAX_SLACK_QUERY_EXPANSIONS
@@ -14,7 +13,7 @@ from onyx.context.search.federated.models import ChannelMetadata
 from onyx.context.search.models import ChunkIndexRequest
 from onyx.federated_connectors.slack.models import SlackEntities
 from onyx.llm.interfaces import LLM
-from onyx.llm.utils import message_to_string
+from onyx.llm.utils import llm_response_to_string
 from onyx.onyxbot.slack.models import ChannelType
 from onyx.prompts.federated_search import SLACK_DATE_EXTRACTION_PROMPT
 from onyx.prompts.federated_search import SLACK_QUERY_EXPANSION_PROMPT
@@ -191,9 +190,7 @@ def extract_date_range_from_query(
 
     try:
         prompt = SLACK_DATE_EXTRACTION_PROMPT.format(query=query)
-        response = message_to_string(
-            llm.invoke_langchain([HumanMessage(content=prompt)])
-        )
+        response = llm_response_to_string(llm.invoke(prompt))
 
         response_clean = _parse_llm_code_block_response(response)
 
@@ -401,8 +398,8 @@ def extract_channel_references_from_query(query_text: str) -> set[str]:
     channel_patterns = [
         r"\bin\s+(?:the\s+)?([a-z0-9_-]+)\s+(?:slack\s+)?channels?\b",  # "in the office channel"
         r"\bfrom\s+(?:the\s+)?([a-z0-9_-]+)\s+(?:slack\s+)?channels?\b",  # "from the office channel"
-        r"\bin\s+#([a-z0-9_-]+)\b",  # "in #office"
-        r"\bfrom\s+#([a-z0-9_-]+)\b",  # "from #office"
+        r"\bin[:\s]*#([a-z0-9_-]+)\b",  # "in #office" or "in:#office"
+        r"\bfrom[:\s]*#([a-z0-9_-]+)\b",  # "from #office" or "from:#office"
     ]
 
     for pattern in channel_patterns:
@@ -584,9 +581,7 @@ def expand_query_with_llm(query_text: str, llm: LLM) -> list[str]:
     )
 
     try:
-        response = message_to_string(
-            llm.invoke_langchain([HumanMessage(content=prompt)])
-        )
+        response = llm_response_to_string(llm.invoke(prompt))
 
         response_clean = _parse_llm_code_block_response(response)
 
