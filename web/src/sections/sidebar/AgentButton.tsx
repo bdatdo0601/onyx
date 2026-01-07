@@ -46,15 +46,16 @@ function SortableItem({ id, children }: SortableItemProps) {
 
 export interface AgentButtonProps {
   agent: MinimalPersonaSnapshot;
+  pinned?: boolean;
 }
 
-const AgentButton = memo(({ agent }: AgentButtonProps) => {
+const AgentButton = memo(({ agent, pinned: pinnedProp }: AgentButtonProps) => {
   const route = useAppRouter();
   const activeSidebarTab = useAppFocus();
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
-  const pinned = pinnedAgents.some(
-    (pinnedAgent) => pinnedAgent.id === agent.id
-  );
+  // Use prop if provided, otherwise derive from hook. We add the pinned prop
+  // to the AgentButton so that we can force a pinned state for the AgentButton in the sidebar.
+  const pinned = pinnedProp ?? pinnedAgents.some((a) => a.id === agent.id);
 
   return (
     <SortableItem id={agent.id}>
