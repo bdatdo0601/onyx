@@ -495,7 +495,10 @@ const MemoizedAppSidebarInner = memo(
                         <AgentButton
                           key={visibleAgent.id}
                           agent={visibleAgent}
-                          pinned
+                          pinned={
+                            visibleAgent.id !== currentAgent?.id ||
+                            currentAgentIsPinned
+                          }
                         />
                       ))}
                     </SortableContext>
