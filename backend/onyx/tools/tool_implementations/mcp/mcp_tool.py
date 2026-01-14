@@ -79,12 +79,34 @@ class MCPTool(Tool[None]):
     def tool_definition(self) -> dict:
         """Return the tool definition from the MCP server"""
         # Convert MCP tool definition to OpenAI function calling format
+        # Ensure parameters is a valid JSON Schema object type for Vertex AI/Gemini compatibility
+        # Vertex AI requires parameters to be of type OBJECT, not empty or other types
+        parameters = self._tool_definition
+        if not parameters or parameters.get("type") != "object":
+            # Wrap non-object schemas or ensure empty schemas have proper structure
+            if parameters and "type" in parameters:
+                # Non-object type schema (e.g., string, array) - this shouldn't happen
+                # but wrap it as a property if it does
+                parameters = {
+                    "type": "object",
+                    "properties": {},
+                }
+            else:
+                # Empty or missing schema - create minimal valid object schema
+                parameters = {
+                    "type": "object",
+                    "properties": parameters.get("properties", {}) if parameters else {},
+                }
+                # Preserve required fields if they exist
+                if parameters and self._tool_definition.get("required"):
+                    parameters["required"] = self._tool_definition["required"]
+
         return {
             "type": "function",
             "function": {
                 "name": self._name,
                 "description": self._description,
-                "parameters": self._tool_definition,
+                "parameters": parameters,
             },
         }
 
