@@ -137,6 +137,10 @@ def construct_tools(
 
     added_search_tool = False
     for db_tool_model in persona.tools:
+        # Skip disabled tools - they should not be available to the LLM
+        if not db_tool_model.enabled:
+            continue
+
         # If allowed_tool_ids is specified, skip tools not in the allowed list
         if allowed_tool_ids is not None and db_tool_model.id not in allowed_tool_ids:
             continue
