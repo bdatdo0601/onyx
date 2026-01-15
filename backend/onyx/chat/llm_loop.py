@@ -60,6 +60,12 @@ logger = setup_logger()
 # Cycle 6: No more tools available, forced to answer
 MAX_LLM_CYCLES = 6
 
+# Maximum number of tool calls to execute concurrently per LLM cycle.
+# This prevents overwhelming MCP endpoints with too many parallel requests,
+# which can cause 429 (Too Many Requests) errors.
+# Value chosen to balance responsiveness with rate limiting concerns.
+MAX_CONCURRENT_TOOL_CALLS = 5
+
 
 def _build_project_file_citation_mapping(
     project_file_metadata: list[ProjectFileMetadata],
@@ -515,7 +521,7 @@ def run_llm_loop(
                 user_info=None,  # TODO, this is part of memories right now, might want to separate it out
                 citation_mapping=citation_mapping,
                 next_citation_num=citation_processor.get_next_citation_number(),
-                max_concurrent_tools=None,
+                max_concurrent_tools=MAX_CONCURRENT_TOOL_CALLS,
                 skip_search_query_expansion=has_called_search_tool,
                 chat_files=chat_files,
             )
