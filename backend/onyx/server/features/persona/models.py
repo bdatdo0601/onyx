@@ -132,7 +132,7 @@ class MinimalPersonaSnapshot(BaseModel):
             tools=[
                 ToolSnapshot.from_model(tool)
                 for tool in persona.tools
-                if should_expose_tool_to_fe(tool)
+                if should_expose_tool_to_fe(tool) and tool.enabled
             ],
             starter_messages=persona.starter_messages,
             llm_relevance_filter=persona.llm_relevance_filter,
@@ -211,7 +211,7 @@ class PersonaSnapshot(BaseModel):
             tools=[
                 ToolSnapshot.from_model(tool)
                 for tool in persona.tools
-                if should_expose_tool_to_fe(tool)
+                if should_expose_tool_to_fe(tool) and tool.enabled
             ],
             labels=[PersonaLabelSnapshot.from_model(label) for label in persona.labels],
             owner=(
@@ -277,7 +277,7 @@ class FullPersonaSnapshot(PersonaSnapshot):
             tools=[
                 ToolSnapshot.from_model(tool)
                 for tool in persona.tools
-                if should_expose_tool_to_fe(tool)
+                if should_expose_tool_to_fe(tool) and tool.enabled
             ],
             labels=[PersonaLabelSnapshot.from_model(label) for label in persona.labels],
             owner=(
